@@ -1,0 +1,17 @@
+# PyInstaller-Bauartefakte
+build/
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+
+# Laufzeit-/Nutzerdaten (gehoeren nicht ins Repo)
+config.json
+ui_einstellungen.json
+watcher_einstellungen.json
+plan.json
+plan.csv
+verschiebe_protokoll.jsonl
+verschiebe_protokoll.jsonl.erledigt
