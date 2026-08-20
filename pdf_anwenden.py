@@ -38,6 +38,8 @@ import shutil
 import sys
 from datetime import datetime
 
+import pdf_sortierer as kern
+
 PROTOKOLL_NAME = "verschiebe_protokoll.jsonl"
 UNGUELTIGE_ZEICHEN = r'[\\/:*?"<>|]'
 
@@ -155,6 +157,7 @@ def anwenden(ordner, kategorien):
         os.makedirs(zielordner_pfad, exist_ok=True)
         ziel = freier_zielpfad(zielordner_pfad, zielname, belegt)
         shutil.move(quelle, ziel)
+        kern.verschiebung_loggen(ordner, quelle, ziel)
         protokoll.append({"von": quelle, "nach": ziel,
                           "zeit": datetime.now().isoformat(timespec="seconds")})
         zaehler["verschoben"] += 1

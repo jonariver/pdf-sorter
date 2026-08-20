@@ -83,6 +83,7 @@ def verarbeite_pdf(ordner, dateiname, modell, schwelle, nur_melden):
             {"von": pfad, "nach": ziel,
              "zeit": datetime.now().isoformat(timespec="seconds")},
             ensure_ascii=False) + "\n")
+    kern.verschiebung_loggen(ordner, pfad, ziel)
     return "verschoben", f"{zielkat}\\{os.path.basename(ziel)}  ({sich}%)", absender
 
 
@@ -118,6 +119,7 @@ def main():
     config, config_pfad = kern.config_laden()
     kern.KATEGORIEN = config["kategorien"]
     kern.BEKANNTE_ABSENDER = config["bekannte_absender"]
+    kern.VISION_MODELL = config.get("vision_modell", kern.STANDARD_VISION_MODELL)
 
     print(f"Ueberwache: {args.ordner}")
     print(f"Modell: {args.modell} | Auto-Schwelle: {args.schwelle}% | "
