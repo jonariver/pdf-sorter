@@ -16,6 +16,7 @@ Start:  python .\\pdf_watcher_ui.py     (oder als gebaute PDF-Waechter.exe)
 import os
 import sys
 import json
+import csv
 import time
 import queue
 import threading
@@ -26,6 +27,7 @@ from tkinter import ttk, filedialog, messagebox
 
 import pdf_sortierer as kern
 import pdf_watcher as watch
+import pdf_ui
 
 MODELLE = ["qwen3:4b", "qwen3:8b"]
 AUTOSTART_NAME = "PDF-Waechter"
@@ -107,6 +109,23 @@ def autostart_aktiv():
         return False
 
 
+def _oeffnen(pfad):
+    """Oeffnet eine Datei mit dem Standardprogramm des Systems."""
+    try:
+        if not os.path.exists(pfad):
+            return
+        if sys.platform.startswith("win"):
+            os.startfile(pfad)   # nur Windows
+        elif sys.platform == "darwin":
+            import subprocess
+            subprocess.Popen(["open", pfad])
+        else:
+            import subprocess
+            subprocess.Popen(["xdg-open", pfad])
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # OBERFLAECHE
 # ---------------------------------------------------------------------------
@@ -176,6 +195,12 @@ class Waechter(tk.Tk):
         self.status_lampe = tk.Label(leiste, text="\u25CF gestoppt",
                                      fg="#b00000", font=("", 11, "bold"))
         self.status_lampe.pack(side="left")
+        self.btn_verlauf = ttk.Button(leiste, text="Verlauf anzeigen",
+                                      command=self._verlauf_zeigen)
+        self.btn_verlauf.pack(side="left", padx=(16, 0))
+        self.btn_einstellungen = ttk.Button(leiste, text="Einstellungen...",
+                                            command=self._einstellungen_oeffnen)
+        self.btn_einstellungen.pack(side="left", padx=(8, 0))
         self.btn_start = ttk.Button(leiste, text="Start", command=self._start)
         self.btn_start.pack(side="right")
         self.btn_stop = ttk.Button(leiste, text="Stopp", command=self._stop,
@@ -273,6 +298,95 @@ class Waechter(tk.Tk):
         self._zustand_speichern()
         self._log("Autostart " + ("aktiviert." if an else "deaktiviert."))
 
+    # ---- Einstellungen (Kategorien & Absender) --------------------------
+    def _einstellungen_oeffnen(self):
+        try:
+            pdf_ui.KonfigFenster(self, on_save=self._konfig_gespeichert)
+        except Exception as e:
+            messagebox.showerror(
+                "Einstellungen",
+                f"Der Einstellungs-Dialog konnte nicht geoeffnet werden:\n{e}")
+
+    def _konfig_gespeichert(self, kategorien):
+        # Frisch gespeicherte Konfiguration sofort in den Kern uebernehmen, damit
+        # ein laufender Waechter die neuen Kategorien/Absender ab dem naechsten
+        # Dokument beruecksichtigt (ohne Neustart).
+        try:
+            config, _ = kern.config_laden()
+            kern.KATEGORIEN = config["kategorien"]
+            kern.BEKANNTE_ABSENDER = config["bekannte_absender"]
+            kern.VISION_MODELL = config.get("vision_modell",
+                                            kern.STANDARD_VISION_MODELL)
+        except Exception:
+            pass
+        self._log("Einstellungen gespeichert - werden ab dem naechsten Dokument "
+                  "beruecksichtigt.")
+
+    # ---- Verschiebungs-Verlauf ------------------------------------------
+    def _verlauf_zeigen(self):
+        ordner = self.ordner_var.get().strip()
+        if not os.path.isdir(ordner):
+            messagebox.showerror("Ordner fehlt",
+                                 "Bitte zuerst einen Ordner waehlen.")
+            return
+        pfad = os.path.join(ordner, kern.VERSCHIEBUNGSLOG_NAME)
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Verschiebungs-Verlauf")
+        dlg.geometry("1000x480")
+        dlg.minsize(720, 360)
+        dlg.transient(self)
+
+        kopf = ttk.Frame(dlg, padding=(10, 8))
+        kopf.pack(fill="x")
+        ttk.Label(kopf, text="Datei: " + pfad).pack(side="left")
+        ttk.Button(kopf, text="Als CSV oeffnen",
+                   command=lambda: _oeffnen(pfad)).pack(side="right")
+
+        rahmen = ttk.Frame(dlg, padding=10)
+        rahmen.pack(fill="both", expand=True)
+        spalten = ("zeit", "vorher", "nachher", "ordner", "pfad")
+        tree = ttk.Treeview(rahmen, columns=spalten, show="headings")
+        for c, t, breite in (("zeit", "Zeitpunkt", 140),
+                             ("vorher", "Vorher", 200),
+                             ("nachher", "Nachher", 260),
+                             ("ordner", "Zielordner", 100),
+                             ("pfad", "Pfad", 320)):
+            tree.heading(c, text=t)
+            tree.column(c, width=breite)
+        scroll = ttk.Scrollbar(rahmen, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        info = ttk.Label(dlg, text="", padding=(10, 4))
+        info.pack(fill="x")
+
+        def fuellen():
+            for iid in tree.get_children():
+                tree.delete(iid)
+            if not os.path.exists(pfad):
+                info.configure(text="Noch keine Verschiebungen protokolliert.")
+                return
+            try:
+                with open(pfad, "r", encoding="utf-8-sig", newline="") as f:
+                    zeilen = list(csv.reader(f, delimiter=";"))
+            except Exception as e:
+                info.configure(text=f"Konnte Log nicht lesen: {e}")
+                return
+            if zeilen and zeilen[0][:1] == ["Zeitpunkt"]:
+                zeilen = zeilen[1:]
+            for row in reversed(zeilen):   # neueste zuerst
+                if len(row) >= 4:
+                    pfad_wert = row[4] if len(row) >= 5 else ""
+                    tree.insert("", "end",
+                                values=(row[0], row[1], row[2], row[3], pfad_wert))
+            info.configure(text=f"{len(zeilen)} Eintrag/Eintraege (neueste oben).")
+
+        ttk.Button(kopf, text="Aktualisieren", command=fuellen).pack(
+            side="right", padx=6)
+        fuellen()
+
     # ---- Start / Stopp ---------------------------------------------------
     def _start(self):
         if self.laeuft:
@@ -368,6 +482,7 @@ class Waechter(tk.Tk):
         config, config_pfad = kern.config_laden()
         kern.KATEGORIEN = config["kategorien"]
         kern.BEKANNTE_ABSENDER = config["bekannte_absender"]
+        kern.VISION_MODELL = config.get("vision_modell", kern.STANDARD_VISION_MODELL)
 
         groessen, erledigt = {}, set()
         fehler_zaehler = {}       # datei -> Anzahl bisheriger (evtl. transienter) Fehler
