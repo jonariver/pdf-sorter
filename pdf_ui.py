@@ -394,8 +394,8 @@ class KonfigFenster(tk.Toplevel):
     def __init__(self, master, on_save):
         super().__init__(master)
         self.title("Einstellungen - Kategorien & Absender")
-        self.geometry("860x780")
-        self.minsize(760, 560)
+        self.geometry("860x860")
+        self.minsize(760, 620)
         self.resizable(True, True)
         self.transient(master)
         self.grab_set()
@@ -418,6 +418,29 @@ class KonfigFenster(tk.Toplevel):
                                      self.config.get("bekannte_absender", {}),
                                      key_lower=True)
         self.abs_editor.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+
+        # Vision-Modell fuer OCR (nur fuer reine Bild-Scans ohne Textebene)
+        vis = ttk.LabelFrame(self, text="Vision-Modell fuer Bild-Scans (OCR)",
+                             padding=8)
+        vis.pack(fill="x", padx=10, pady=(0, 8))
+        ttk.Label(
+            vis,
+            text=("Wird nur benutzt, wenn ein PDF keine Textebene hat (reiner "
+                  "Bild-Scan). Muss in Ollama installiert sein. Standard: "
+                  "llama3.2-vision; Alternativen z.B. qwen3-vl:8b, minicpm-v."),
+            wraplength=760).pack(anchor="w")
+        vzeile = ttk.Frame(vis)
+        vzeile.pack(fill="x", pady=(6, 0))
+        ttk.Label(vzeile, text="Modellname:").pack(side="left")
+        self.vis_var = tk.StringVar(
+            value=self.config.get("vision_modell", kern.STANDARD_VISION_MODELL))
+        ttk.Entry(vzeile, textvariable=self.vis_var, width=28).pack(
+            side="left", padx=(4, 8))
+        self.btn_vis_laden = ttk.Button(vzeile, text="Vision-Modell laden",
+                                        command=self._vision_laden)
+        self.btn_vis_laden.pack(side="left")
+        self.vis_status = tk.StringVar(value="")
+        ttk.Label(vis, textvariable=self.vis_status).pack(anchor="w", pady=(4, 0))
 
         neu = self.config.get("neue_absender", [])
         if neu:
@@ -471,6 +494,60 @@ class KonfigFenster(tk.Toplevel):
             f"Vorschlaege in die Tabelle 'Bekannte Absender' eingetragen.\n\n"
             f"Bitte pruefen, bei Bedarf anpassen und dann 'Speichern'.")
 
+    # ---- Vision-Modell herunterladen (analog zu "Modell laden") ---------
+    def _vision_laden(self):
+        name = self.vis_var.get().strip()
+        if not name:
+            messagebox.showerror("Vision-Modell",
+                                 "Bitte zuerst einen Modellnamen eingeben.")
+            return
+        if not kern.ollama_erreichbar():
+            messagebox.showwarning(
+                "Ollama laeuft nicht",
+                "Ollama ist nicht erreichbar. Bitte zuerst Ollama starten "
+                "(die Hauptoberflaeche bietet das automatisch an) und es dann "
+                "erneut versuchen.")
+            return
+        if kern.modell_vorhanden(name):
+            self.vis_status.set(f"'{name}' ist bereits installiert.")
+            messagebox.showinfo("Vision-Modell",
+                                f"'{name}' ist bereits installiert.")
+            return
+        self.btn_vis_laden.configure(state="disabled")
+        self.vis_status.set(f"Lade '{name}' herunter (mehrere GB, das dauert)...")
+        self._pull_queue = queue.Queue()
+
+        def cb(status, prozent):
+            self._pull_queue.put((status, prozent))
+
+        def arbeit():
+            ok = kern.modell_laden(name, fortschritt=cb)
+            self._pull_queue.put(("__fertig__", ok))
+
+        threading.Thread(target=arbeit, daemon=True).start()
+        self.after(150, self._vision_pull_poll)
+
+    def _vision_pull_poll(self):
+        try:
+            while True:
+                status, wert = self._pull_queue.get_nowait()
+                if status == "__fertig__":
+                    self.btn_vis_laden.configure(state="normal")
+                    if wert:
+                        self.vis_status.set(
+                            f"Vision-Modell '{self.vis_var.get().strip()}' ist bereit.")
+                    else:
+                        self.vis_status.set(
+                            "Konnte nicht geladen werden - laeuft Ollama?")
+                    return
+                if wert is not None:
+                    self.vis_status.set(f"{status} ({wert}%)")
+                else:
+                    self.vis_status.set(str(status))
+        except queue.Empty:
+            pass
+        self.after(200, self._vision_pull_poll)
+
     def _speichern(self):
         kats = self.kat_editor.werte()
         if not kats:
@@ -479,6 +556,8 @@ class KonfigFenster(tk.Toplevel):
             return
         self.config["kategorien"] = kats
         self.config["bekannte_absender"] = self.abs_editor.werte()
+        self.config["vision_modell"] = (self.vis_var.get().strip()
+                                        or kern.STANDARD_VISION_MODELL)
         kern._config_speichern(self.config_pfad, self.config)
         self.on_save(list(kats.keys()))
         messagebox.showinfo("Gespeichert", "Einstellungen wurden gespeichert.")
