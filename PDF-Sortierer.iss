@@ -41,8 +41,8 @@ OutputBaseFilename=PDF-Sortierer-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 ; Kein Administrator noetig - alles im Benutzerprofil (dort ist die App auch
 ; schreibberechtigt fuer ihre config.json).
 PrivilegesRequired=lowest
