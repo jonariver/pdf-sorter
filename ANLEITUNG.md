@@ -131,9 +131,15 @@ eines von beiden nutzen.
 
 So läuft ein typischer Durchgang in der Oberfläche **PDF-Sortierer**:
 
+![Die Hauptoberfläche des PDF-Sortierers](bilder/hauptfenster.png)
+*Die Hauptoberfläche: oben Ordner und Modell, darunter die Knopfleiste, unten die Ergebnistabelle.*
+
 ### Schritt 1 – Ordner wählen
 Oben bei „Ordner" auf **Durchsuchen…** klicken und den Ordner mit deinen
 gescannten PDFs auswählen. Der zuletzt benutzte Ordner wird gemerkt.
+
+![Ordner-Auswahl mit den angelegten Kategorie-Ordnern](bilder/ordner-kategorien.png)
+*Im Auswahl-Dialog sieht man später auch die vom Programm angelegten Kategorie-Unterordner.*
 
 ### Schritt 2 – (optional) Einstellungen prüfen
 - **Modell**: `qwen3:4b` oder `qwen3:8b`.
@@ -186,6 +192,9 @@ Ordner, warnt das Programm – dann lieber neu analysieren.
 
 Über **Einstellungen…** öffnet sich ein Fenster mit drei Bereichen.
 
+![Der Einstellungen-Dialog](bilder/einstellungen.png)
+*Kategorien, bekannte Absender (Kürzungen) und das Vision-Modell für OCR in einem Fenster.*
+
 ### Kategorien
 Das sind deine späteren Unterordner. Jede Kategorie hat einen **Ordnernamen** und
 eine kurze **Beschreibung**. Die Beschreibung ist wichtig: Sie hilft der KI zu
@@ -226,6 +235,9 @@ Zum Schluss **Speichern** nicht vergessen.
 Der **PDF-Wächter** überwacht einen Ordner und sortiert neue Scans automatisch
 ein. Ideal für den Ausgabeordner deines Scanners.
 
+![Der PDF-Wächter im Betrieb](bilder/waechter.png)
+*Grüne Lampe = läuft. Darunter die Schalter, unten das Aktivitätsprotokoll.*
+
 ### So richtest du ihn ein
 1. **PDF-Wächter** öffnen.
 2. Den zu überwachenden Ordner wählen.
@@ -251,6 +263,10 @@ ein. Ideal für den Ausgabeordner deines Scanners.
 - **Verlauf anzeigen**: zeigt eine Liste aller automatisch verschobenen Dateien
   (Zeitpunkt, Name vorher/nachher, Zielordner, voller Pfad). Die kann auch als
   CSV geöffnet werden.
+
+  ![Der Verschiebungs-Verlauf](bilder/verlauf.png)
+  *Der Verschiebungs-Verlauf – hier noch leer, weil noch nichts verschoben wurde.*
+
 - **Einstellungen…**: derselbe Dialog wie in der Hauptoberfläche (Kategorien,
   Absender, Vision-Modell). Änderungen greifen ab dem nächsten Dokument, ohne
   Neustart.
