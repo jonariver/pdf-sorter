@@ -150,7 +150,7 @@ class Waechter(tk.Tk):
         zeile2 = ttk.Frame(oben)
         zeile2.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
         ttk.Label(zeile2, text="Modell:").pack(side="left")
-        self.modell_var = tk.StringVar(value=MODELLE[1])   # 8b = genauer, unbeaufsichtigt
+        self.modell_var = tk.StringVar(value=MODELLE[0])   # 4b = laeuft auch auf schwaecheren Rechnern
         self.cb_modell = ttk.Combobox(zeile2, textvariable=self.modell_var,
                                       values=MODELLE, width=12, state="readonly")
         self.cb_modell.pack(side="left", padx=(4, 12))
@@ -192,6 +192,17 @@ class Waechter(tk.Tk):
         ttk.Checkbutton(opt, text="Beim Programmstart sofort ueberwachen",
                         variable=self.sofort_var,
                         command=self._zustand_speichern).pack(side="left", padx=(16, 0))
+
+        opt2 = ttk.Frame(self, padding=(10, 0))
+        opt2.pack(fill="x")
+        self.speicher_frei_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            opt2,
+            text="Speicher nach der Arbeit freigeben  "
+                 "(spart RAM/VRAM; jedes neue Dokument laedt das Modell neu - "
+                 "auf schwachen Rechnern lieber aus)",
+            variable=self.speicher_frei_var,
+            command=self._zustand_speichern).pack(side="left")
 
         rahmen = ttk.Frame(self, padding=10)
         rahmen.pack(fill="both", expand=True)
@@ -236,6 +247,7 @@ class Waechter(tk.Tk):
             self.intervall_var.set(st["intervall"])
         self.nur_melden_var.set(bool(st.get("nur_melden", False)))
         self.sofort_var.set(bool(st.get("sofort", True)))
+        self.speicher_frei_var.set(bool(st.get("speicher_frei", False)))
 
     def _zustand_speichern(self):
         _state_speichern({
@@ -245,6 +257,7 @@ class Waechter(tk.Tk):
             "intervall": self.intervall_var.get(),
             "nur_melden": self.nur_melden_var.get(),
             "sofort": self.sofort_var.get(),
+            "speicher_frei": self.speicher_frei_var.get(),
         })
 
     def _autostart_umschalten(self):
@@ -279,7 +292,7 @@ class Waechter(tk.Tk):
         self.stop_event = threading.Event()
         args = (ordner, self.modell_var.get(), self.schwelle_var.get(),
                 max(3, self.intervall_var.get()), self.nur_melden_var.get(),
-                self.stop_event)
+                self.speicher_frei_var.get(), self.stop_event)
         self.thread = threading.Thread(target=self._loop, args=args, daemon=True)
         self.thread.start()
 
@@ -301,7 +314,7 @@ class Waechter(tk.Tk):
         self.destroy()
 
     # ---- Ueberwachungs-Schleife (Hintergrund-Thread) --------------------
-    def _loop(self, ordner, modell, schwelle, intervall, nur_melden, stop_event):
+    def _loop(self, ordner, modell, schwelle, intervall, nur_melden, speicher_frei, stop_event):
         def log(t):
             self.meldungen.put(("log", t))
 
@@ -357,6 +370,8 @@ class Waechter(tk.Tk):
         kern.BEKANNTE_ABSENDER = config["bekannte_absender"]
 
         groessen, erledigt = {}, set()
+        fehler_zaehler = {}       # datei -> Anzahl bisheriger (evtl. transienter) Fehler
+        benutzt_gesamt = False    # wurde das Modell ueberhaupt jemals gebraucht?
         self.meldungen.put(("status", "laeuft"))
         log(f"Ueberwachung aktiv: {ordner}"
             + ("   [NUR MELDEN]" if nur_melden else ""))
@@ -367,6 +382,8 @@ class Waechter(tk.Tk):
                             if f.lower().endswith(".pdf")}
             except OSError:
                 aktuelle = set()
+
+            benutzt_zyklus = False   # wurde in diesem Durchlauf etwas verarbeitet?
 
             for f in sorted(aktuelle):
                 if stop_event.is_set():
@@ -383,6 +400,10 @@ class Waechter(tk.Tk):
                 if vorher is None or vorher != groesse or groesse == 0:
                     continue   # noch nicht stabil (Scan wird evtl. geschrieben)
 
+                # Ein neues, stabiles Dokument ist da: erst JETZT wird das Modell
+                # tatsaechlich gebraucht (und von Ollama in den Speicher geladen).
+                benutzt_zyklus = True
+                benutzt_gesamt = True
                 status, info, absender = watch.verarbeite_pdf(
                     ordner, f, modell, schwelle, nur_melden)
                 stempel = datetime.now().strftime("%H:%M:%S")
@@ -390,6 +411,7 @@ class Waechter(tk.Tk):
                     self.meldungen.put(("log", f"[{stempel}] OK    {f}\n"
                                         f"            -> {info}"))
                     watch._absender_merken(config, config_pfad, absender)
+                    fehler_zaehler.pop(f, None)
                 elif status == "wuerde":
                     self.meldungen.put(("log", f"[{stempel}] WUERDE {f}\n"
                                         f"            -> {info}"))
@@ -400,14 +422,32 @@ class Waechter(tk.Tk):
                                         f"(bleibt liegen: {info})"))
                     watch._absender_merken(config, config_pfad, absender)
                     erledigt.add(f)
-                else:
-                    self.meldungen.put(("log", f"[{stempel}] FEHLER {f}: {info}"))
-                    erledigt.add(f)
+                else:   # fehler - oft nur voruebergehend (z.B. Ollama nicht bereit)
+                    n = fehler_zaehler.get(f, 0) + 1
+                    fehler_zaehler[f] = n
+                    if n >= 3:
+                        self.meldungen.put((
+                            "log", f"[{stempel}] FEHLER {f}: {info} "
+                            f"(gebe nach {n} Versuchen auf)"))
+                        erledigt.add(f)
+                    else:
+                        self.meldungen.put((
+                            "log", f"[{stempel}] FEHLER {f}: {info} "
+                            f"(Versuch {n} - probiere es gleich erneut)"))
 
             for f in list(groessen):
                 if f not in aktuelle:
                     groessen.pop(f, None)
                     erledigt.discard(f)
+                    fehler_zaehler.pop(f, None)
+
+            # Wenn gewuenscht und in diesem Durchlauf gearbeitet wurde: Modell
+            # wieder aus dem Speicher entladen, um RAM/VRAM freizugeben (auf
+            # schwachen Rechnern besser aus, weil sonst jedes Dokument neu laedt).
+            if benutzt_zyklus and speicher_frei:
+                if kern.modell_entladen(modell):
+                    log("Modell aus dem Speicher entladen (frei bis zum "
+                        "naechsten Dokument).")
 
             # in 1-Sekunden-Schritten warten, damit Stopp schnell wirkt
             for _ in range(intervall):
@@ -415,6 +455,9 @@ class Waechter(tk.Tk):
                     break
                 time.sleep(1)
 
+        # Beim Stoppen ebenfalls entladen, falls die Option aktiv ist
+        if benutzt_gesamt and speicher_frei:
+            kern.modell_entladen(modell)
         self.meldungen.put(("status", "gestoppt"))
 
     # ---- Meldungen verarbeiten ------------------------------------------
