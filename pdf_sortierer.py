@@ -31,9 +31,10 @@ Voraussetzungen auf deinem Windows-11-Rechner
     Text-Fortschrittsanzeige)
 4) Ollama installiert und ein Modell geladen:
        ollama pull qwen3:8b
-5) OPTIONAL fuer reine Bild-Scans (OCR):
-       pip install pytesseract pdf2image
-   plus Tesseract-OCR (mit Sprachpaket "deu") und Poppler.
+5) OPTIONAL fuer reine Bild-Scans (OCR): PyMuPDF und ein Vision-Modell:
+       pip install pymupdf
+       ollama pull llama3.2-vision
+   (kein Tesseract/Poppler noetig - die Texterkennung laeuft ueber Ollama).
 
 ------------------------------------------------------------
 Aufruf (PowerShell)
@@ -45,6 +46,7 @@ Optional:
 """
 
 import argparse
+import base64
 import csv
 import json
 import os
@@ -59,6 +61,9 @@ from datetime import datetime
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 STANDARD_MODELL = "qwen3:8b"
+# Vision-Modell fuer OCR von reinen Bild-Scans (ohne Textebene). Ueber Ollama.
+# Alternativen mit besserer Dokument-/Deutsch-OCR: "qwen3-vl:8b", "minicpm-v".
+STANDARD_VISION_MODELL = "llama3.2-vision"
 
 # Kategorien = spaetere Unterordner. Key = Ordnername, Wert = kurze Definition.
 # Das hier sind nur die VORGABEN; im Betrieb wird aus config.json geladen.
@@ -99,6 +104,7 @@ STANDARD_BEKANNTE_ABSENDER = {
 # Bis dahin gelten die STANDARD_-Vorgaben von oben.
 KATEGORIEN = dict(STANDARD_KATEGORIEN)
 BEKANNTE_ABSENDER = dict(STANDARD_BEKANNTE_ABSENDER)
+VISION_MODELL = STANDARD_VISION_MODELL
 
 
 def app_verzeichnis():
@@ -126,6 +132,7 @@ def config_laden():
         config = {
             "kategorien": STANDARD_KATEGORIEN,
             "bekannte_absender": STANDARD_BEKANNTE_ABSENDER,
+            "vision_modell": STANDARD_VISION_MODELL,
             "neue_absender": [],
         }
         _config_speichern(pfad, config)
@@ -136,6 +143,7 @@ def config_laden():
     # fehlende Schluessel robust ergaenzen (z.B. bei aelteren/handischen Dateien)
     config.setdefault("kategorien", STANDARD_KATEGORIEN)
     config.setdefault("bekannte_absender", STANDARD_BEKANNTE_ABSENDER)
+    config.setdefault("vision_modell", STANDARD_VISION_MODELL)
     config.setdefault("neue_absender", [])
     return config, pfad
 
@@ -277,18 +285,66 @@ def text_aus_pdf(pfad):
     return text, ("leer" if not text else "textebene")
 
 
-def _ocr_versuchen(pfad):
+def _pdf_seiten_bilder(pfad, max_seiten=2, zoom=2.0):
+    """Rendert die ersten Seiten eines PDFs zu PNG-Bildern (als base64-Strings).
+    Nutzt PyMuPDF (reines Python-Paket, kein Fremdprogramm noetig). Gibt eine
+    leere Liste zurueck, wenn PyMuPDF fehlt oder das Rendern scheitert."""
     try:
-        import pytesseract
-        from pdf2image import convert_from_path
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz
+    except ImportError:
+        return []
+    bilder = []
+    try:
+        doc = fitz.open(pfad)
+        seiten = min(max_seiten, doc.page_count)
+        matrix = fitz.Matrix(zoom, zoom)   # hoehere Aufloesung = bessere OCR
+        for i in range(seiten):
+            pix = doc[i].get_pixmap(matrix=matrix)
+            bilder.append(base64.b64encode(pix.tobytes("png")).decode("ascii"))
+        doc.close()
+    except Exception as e:
+        print(f"    [Hinweis] Konnte Seiten nicht rendern ({e}).")
+        return []
+    return bilder
+
+
+def _ocr_versuchen(pfad):
+    """Liest reine Bild-Scans (ohne Textebene) per lokalem Vision-Modell ueber
+    Ollama: die Seite wird zu einem Bild gerendert und das Modell gibt den Text
+    zurueck. Braucht ein installiertes Vision-Modell (z.B. 'ollama pull
+    llama3.2-vision'). Gibt den erkannten Text oder None zurueck."""
+    bilder = _pdf_seiten_bilder(pfad)
+    if not bilder:
+        return None
+    modell = VISION_MODELL or STANDARD_VISION_MODELL
+    try:
+        import requests
     except ImportError:
         return None
+    system = ("Du bist ein praezises OCR-Werkzeug fuer deutsche Dokumente. Gib "
+              "den GESAMTEN sichtbaren Text so genau wie moeglich wieder - nur "
+              "den Text, ohne Kommentare und ohne Markdown.")
+    payload = {
+        "model": modell,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",
+             "content": "Bitte gib den vollstaendigen Text dieses Dokuments wieder.",
+             "images": bilder},
+        ],
+        "stream": False,
+        "options": {"temperature": 0},
+    }
     try:
-        bilder = convert_from_path(pfad, dpi=200, first_page=1, last_page=2)
-        stuecke = [pytesseract.image_to_string(b, lang="deu") for b in bilder]
-        return "\n".join(stuecke)
+        antwort = requests.post(OLLAMA_URL, json=payload, timeout=600)
+        antwort.raise_for_status()
+        return (antwort.json()["message"]["content"] or "").strip()
     except Exception as e:
-        print(f"    [Hinweis] OCR nicht moeglich ({e}).")
+        print(f"    [Hinweis] Bild-Texterkennung nicht moeglich ({e}). "
+              f"Ist das Vision-Modell '{modell}' installiert?")
         return None
 
 
@@ -648,6 +704,32 @@ def neue_absender_pflegen(plan, config, config_pfad):
         print("Die Liste 'neue_absender' raeumt sich danach von selbst auf.")
 
 
+VERSCHIEBUNGSLOG_NAME = "verschiebungen.csv"
+
+
+def verschiebung_loggen(ordner, von_pfad, nach_pfad):
+    """Haengt eine Zeile an ein dauerhaftes, menschenlesbares Verschiebe-Log
+    (verschiebungen.csv im jeweiligen Ordner) an: Zeitpunkt, Name vorher, Name
+    nachher, Zielordner. Dieses Log wird - anders als das Rueckgaengig-Protokoll -
+    nie automatisch geleert und haelt dauerhaft fest, was wann passiert ist."""
+    pfad = os.path.join(ordner, VERSCHIEBUNGSLOG_NAME)
+    neu = not os.path.exists(pfad)
+    try:
+        with open(pfad, "a", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            if neu:
+                w.writerow(["Zeitpunkt", "Vorher", "Nachher", "Zielordner", "Pfad"])
+            w.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                os.path.basename(von_pfad),
+                os.path.basename(nach_pfad),
+                os.path.basename(os.path.dirname(nach_pfad)),
+                os.path.abspath(nach_pfad),
+            ])
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="PDF-Sortierer - Analyse & Vorschau (verschiebt nichts).")
@@ -666,10 +748,11 @@ def main():
         sys.exit(1)
 
     # Kategorien + Absender aus config.json neben dem Skript laden
-    global KATEGORIEN, BEKANNTE_ABSENDER
+    global KATEGORIEN, BEKANNTE_ABSENDER, VISION_MODELL
     config, config_pfad = config_laden()
     KATEGORIEN = config["kategorien"]
     BEKANNTE_ABSENDER = config["bekannte_absender"]
+    VISION_MODELL = config["vision_modell"]
 
     plan = analysiere_ordner(args.ordner, args.model, args.schwelle, args.limit)
     uebersicht_ausgeben(plan)
