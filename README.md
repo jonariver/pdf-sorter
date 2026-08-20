@@ -27,7 +27,8 @@ Computer nicht. Für die KI wird [Ollama](https://ollama.com) verwendet.
 - **Lernfähige Kürzungen:** neu gesehene Absender werden gesammelt und lassen
   sich per Klick auf einheitliche Kurznamen bringen.
 - **Bild-Scans (OCR):** reine Bild-Scans ohne Textebene werden über ein lokales
-  Vision-Modell (Ollama) gelesen – kein Tesseract oder Poppler nötig.
+  Vision-Modell (Ollama) gelesen – kein Tesseract oder Poppler nötig. Das
+  Vision-Modell lässt sich im Einstellungen-Dialog wählen und per Knopf laden.
 - **Verschiebungs-Protokoll:** jede Verschiebung wird dauerhaft in
   `verschiebungen.csv` festgehalten (Zeitpunkt, Name vorher/nachher, Zielordner,
   voller Pfad).
