@@ -122,7 +122,7 @@ still installieren** (Häkchen im Assistenten; benötigt einmalig Internet). Das
 KI-Modell wird nicht mitgeliefert, sondern beim ersten Start nachgeladen.
 
 Hinweis: Die `Setup.exe` ist nicht signiert – Windows SmartScreen zeigt beim
-ersten Start eine Warnung („Weitere Informationen → Trotzdem ausführen“).
+ersten Start eine Warnung („Weitere Informationen → Trotzdem ausführen").
 
 ## Dateien
 
