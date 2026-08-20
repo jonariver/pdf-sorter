@@ -239,6 +239,18 @@ def modell_laden(name, fortschritt=None):
             fortschritt(f"Fehler: {e}", None)
         return False
 
+
+def modell_entladen(modell):
+    """Bittet Ollama, das Modell aus dem Speicher zu entladen (keep_alive=0),
+    um VRAM/RAM freizugeben. Gibt True zurueck, wenn der Aufruf gelang."""
+    try:
+        import requests
+        requests.post(OLLAMA_BASIS + "/api/generate",
+                      json={"model": modell, "keep_alive": 0}, timeout=10)
+        return True
+    except Exception:
+        return False
+
 # ----------------------------------------------------------------------------
 # TEXT-EXTRAKTION
 # ----------------------------------------------------------------------------
