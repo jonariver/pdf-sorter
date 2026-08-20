@@ -11,6 +11,12 @@ kryptisch benannte PDFs aus, und das Sortieren von Hand ist zu mühsam.
 **Alles läuft lokal auf dem eigenen Rechner** – die Dokumente verlassen den
 Computer nicht. Für die KI wird [Ollama](https://ollama.com) verwendet.
 
+## Anleitungen
+
+- **[ANLEITUNG.md](ANLEITUNG.md)** – ausführliche Bedienungsanleitung (Installation,
+  Sortieren, Wächter, Einstellungen, OCR, Problembehebung) mit Screenshots.
+- **[MAC.md](MAC.md)** – Einrichtung und Start auf macOS, inklusive fertiger Scripts.
+
 ## Was es kann
 
 - **Analysieren & Vorschlagen:** liest jeden Scan, bestimmt Kategorie, Absender,
@@ -98,6 +104,9 @@ python pdf_watcher_ui.py
 Ordner wählen, *Start* – oder als Fenster, das beim Windows-Start automatisch
 mitläuft und sofort überwacht (Häkchen in der Oberfläche).
 
+Auf dem Mac läuft alles aus dem Quellcode oder als selbstgebaute `.app` –
+Schritt-für-Schritt in [MAC.md](MAC.md).
+
 ## Als .exe verpacken (ohne Python beim Nutzer)
 
 Die beigelegten Batch-Dateien bauen mit [PyInstaller](https://pyinstaller.org)
@@ -137,6 +146,7 @@ ersten Start eine Warnung („Weitere Informationen → Trotzdem ausführen").
 | `Exe_bauen.bat` / `Waechter_Exe_bauen.bat` | einzelne `.exe` bauen |
 | `Alles_bauen.bat` | alles bauen (beide `.exe` + `Setup.exe`) |
 | `PDF-Sortierer.iss` / `Installer_bauen.bat` | `Setup.exe` (Installer) bauen |
+| `Mac_*.command` | Einrichten/Starten/Autostart/Bauen auf dem Mac (siehe `MAC.md`) |
 
 `config.json` (Kategorien & Absender) sowie die Zustands- und Protokolldateien
 (u. a. `verschiebungen.csv`) werden beim ersten Start bzw. Betrieb automatisch
