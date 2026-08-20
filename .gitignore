@@ -16,3 +16,6 @@ plan.csv
 verschiebe_protokoll.jsonl
 verschiebe_protokoll.jsonl.erledigt
 verschiebungen.csv
+
+# Mac: virtuelle Python-Umgebung
+.venv/
