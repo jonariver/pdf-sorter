@@ -28,6 +28,34 @@ Computer nicht. Für die KI wird [Ollama](https://ollama.com) verwendet.
 - **Kategorien & Absender** sind frei konfigurierbar (im Programm oder in
   `config.json`).
 
+## Mindestanforderungen
+
+Das Programm selbst ist sehr genuegsam - der Bedarf kommt fast ausschliesslich
+vom lokalen KI-Modell (ueber Ollama). Richtwerte:
+
+**Minimum (mit dem kleinen Modell `qwen3:4b`):**
+- Windows 10 oder 11 (64-Bit)
+- 64-Bit-Prozessor mit AVX2-Unterstuetzung (praktisch jeder Rechner ab ca. 2015)
+- 8 GB Arbeitsspeicher (RAM)
+- ca. 10 GB freier Speicherplatz (Ollama + ein Modell)
+- Keine Grafikkarte noetig - Ollama rechnet dann auf dem Prozessor (langsamer,
+  fuer den Hintergrund-Betrieb aber ausreichend)
+- Internet einmalig fuer die Installation von Ollama und den Modell-Download
+
+**Empfohlen (fluessiger, auch fuer das genauere `qwen3:8b`):**
+- 16 GB Arbeitsspeicher
+- SSD statt Festplatte (das Modell laedt dann in Sekunden statt Minuten)
+- Optional eine Grafikkarte mit mindestens 6 GB Videospeicher (NVIDIA ab
+  GTX-900-Serie / CUDA 5.0, AMD via ROCm, oder Apple Silicon) - damit laeuft
+  die Zuordnung um ein Vielfaches schneller
+
+**Faustregel zum Speicher:** Ein Modell braucht grob so viel freien Speicher wie
+seine Dateigroesse plus etwas Reserve - `qwen3:4b` etwa 3-4 GB, `qwen3:8b` etwa
+6 GB. Ist zu wenig frei, laedt Ollama das Modell nicht; dann hilft das kleinere
+Modell.
+
+Nicht unterstuetzt: sehr alte Prozessoren ohne AVX2 - dort startet Ollama nicht.
+
 ## Voraussetzungen
 
 - Windows 10/11
