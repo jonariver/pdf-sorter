@@ -91,6 +91,7 @@ def analyse_lauf(ordner, modell, schwelle, limit, on_datei, on_status):
     config, config_pfad = kern.config_laden()
     kern.KATEGORIEN = config["kategorien"]
     kern.BEKANNTE_ABSENDER = config["bekannte_absender"]
+    kern.VISION_MODELL = config.get("vision_modell", kern.STANDARD_VISION_MODELL)
 
     pdfs = [f for f in sorted(os.listdir(ordner)) if f.lower().endswith(".pdf")]
     if limit:
@@ -166,6 +167,7 @@ def anwenden_lauf(ordner, plan, on_zeile):
         shutil.move(quelle, ziel)
         protokoll.append({"von": quelle, "nach": ziel,
                           "zeit": datetime.now().isoformat(timespec="seconds")})
+        kern.verschiebung_loggen(ordner, quelle, ziel)
         verschoben += 1
         on_zeile(f"{e['datei']}  ->  {kat}\\{os.path.basename(ziel)}")
 
