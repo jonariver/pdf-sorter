@@ -22,9 +22,15 @@ Computer nicht. Für die KI wird [Ollama](https://ollama.com) verwendet.
 - **Grafische Oberfläche:** Ordner wählen, analysieren, in einer Tabelle prüfen
   (unsichere Fälle per Doppelklick korrigieren), anwenden, rückgängig.
 - **Wächter (Dauerbetrieb):** überwacht einen Ordner und sortiert neue, sichere
-  Scans automatisch ein; unsichere bleiben zur manuellen Prüfung liegen.
+  Scans automatisch ein; unsichere bleiben zur manuellen Prüfung liegen. Verlauf
+  und die Kategorien-/Absender-Einstellungen sind direkt aus dem Wächter erreichbar.
 - **Lernfähige Kürzungen:** neu gesehene Absender werden gesammelt und lassen
   sich per Klick auf einheitliche Kurznamen bringen.
+- **Bild-Scans (OCR):** reine Bild-Scans ohne Textebene werden über ein lokales
+  Vision-Modell (Ollama) gelesen – kein Tesseract oder Poppler nötig.
+- **Verschiebungs-Protokoll:** jede Verschiebung wird dauerhaft in
+  `verschiebungen.csv` festgehalten (Zeitpunkt, Name vorher/nachher, Zielordner,
+  voller Pfad).
 - **Kategorien & Absender** sind frei konfigurierbar (im Programm oder in
   `config.json`).
 
@@ -67,10 +73,11 @@ Nicht unterstuetzt: sehr alte Prozessoren ohne AVX2 - dort startet Ollama nicht.
   das Programm an, es herunterzuladen.
 - Zum Ausführen aus dem Quellcode: Python 3.10+ und die Pakete
   ```
-  pip install pdfplumber requests
+  pip install pdfplumber requests pymupdf
   ```
-  (Optional für reine Bild-Scans ohne Textebene: `pip install pytesseract
-  pdf2image` plus Tesseract-OCR mit deutschem Sprachpaket und Poppler.)
+  (Für reine Bild-Scans ohne Textebene wird zusätzlich ein lokales
+  Vision-Modell genutzt – einmalig `ollama pull llama3.2-vision`.
+  Kein Tesseract oder Poppler nötig, alles läuft über Ollama.)
 - Eine dedizierte Grafikkarte beschleunigt die Zuordnung deutlich, ist aber kein
   Muss. Ohne GPU dauert ein Dokument je nach Rechner einige Sekunden.
 
@@ -90,30 +97,49 @@ python pdf_watcher_ui.py
 Ordner wählen, *Start* – oder als Fenster, das beim Windows-Start automatisch
 mitläuft und sofort überwacht (Häkchen in der Oberfläche).
 
-## Als .exe verpacken (ohne Python-Start)
+## Als .exe verpacken (ohne Python beim Nutzer)
 
-Die beigelegten Batch-Dateien bauen mit
-[PyInstaller](https://pyinstaller.org) je eine `.exe`:
+Die beigelegten Batch-Dateien bauen mit [PyInstaller](https://pyinstaller.org)
+eigenständige `.exe`-Dateien – der Nutzer braucht dann **kein Python**:
 
-- `Exe_bauen.bat` → `PDF-Sortierer.exe` (Oberfläche)
-- `Waechter_Exe_bauen.bat` → `PDF-Waechter.exe` (Wächter)
+- `Alles_bauen.bat` – **ein Klick**: baut beide `.exe` und danach die `Setup.exe`.
+- `Exe_bauen.bat` → `PDF-Sortierer.exe` (Oberfläche), einzeln.
+- `Waechter_Exe_bauen.bat` → `PDF-Waechter.exe` (Wächter), einzeln.
 
-Die `.exe` ersetzt nur den Python-Start – **Ollama muss weiterhin installiert
-sein und laufen.**
+Die `.exe` bringt Python und alle Pakete selbst mit. **Ollama** wird davon nicht
+ersetzt und muss auf dem Zielrechner vorhanden sein.
+
+## Setup.exe (Installer)
+
+`PDF-Sortierer.iss` ist ein [Inno-Setup](https://jrsoftware.org/isdl.php)-Skript
+(Version 6.1+), das aus den beiden `.exe` eine `Setup.exe` baut.
+`Installer_bauen.bat` (oder `Alles_bauen.bat`) übernimmt das Kompilieren; das
+Ergebnis liegt in `Output\`.
+
+Der Installer legt Startmenü-/Desktop-Verknüpfungen an, richtet auf Wunsch den
+Wächter-Autostart ein und kann **Ollama bei Bedarf selbst herunterladen und
+still installieren** (Häkchen im Assistenten; benötigt einmalig Internet). Das
+KI-Modell wird nicht mitgeliefert, sondern beim ersten Start nachgeladen.
+
+Hinweis: Die `Setup.exe` ist nicht signiert – Windows SmartScreen zeigt beim
+ersten Start eine Warnung („Weitere Informationen → Trotzdem ausführen“).
 
 ## Dateien
 
 | Datei | Zweck |
 |-------|-------|
-| `pdf_sortierer.py` | Analyse-Logik (Text lesen, Kategorie/Name, Ollama, Kern) |
+| `pdf_sortierer.py` | Analyse-Logik (Text lesen, OCR, Kategorie/Name, Ollama, Kern) |
 | `pdf_anwenden.py` | Ordner anlegen, umbenennen, verschieben, rückgängig (Konsole) |
 | `pdf_ui.py` | grafische Oberfläche |
 | `pdf_watcher.py` | Wächter-Logik (Konsole) |
-| `pdf_watcher_ui.py` | Wächter mit Fenster (Status, Start/Stopp, Autostart) |
-| `Exe_bauen.bat` / `Waechter_Exe_bauen.bat` | `.exe` bauen |
+| `pdf_watcher_ui.py` | Wächter mit Fenster (Status, Verlauf, Einstellungen, Autostart) |
+| `Exe_bauen.bat` / `Waechter_Exe_bauen.bat` | einzelne `.exe` bauen |
+| `Alles_bauen.bat` | alles bauen (beide `.exe` + `Setup.exe`) |
+| `PDF-Sortierer.iss` / `Installer_bauen.bat` | `Setup.exe` (Installer) bauen |
 
-`config.json` (Kategorien & Absender) sowie die Zustandsdateien werden beim
-ersten Start automatisch angelegt und sind bewusst nicht Teil des Repositories.
+`config.json` (Kategorien & Absender) sowie die Zustands- und Protokolldateien
+(u. a. `verschiebungen.csv`) werden beim ersten Start bzw. Betrieb automatisch
+angelegt und sind bewusst nicht Teil des Repositories.
 
 ## Datenschutz
 
